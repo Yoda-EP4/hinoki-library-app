@@ -1,0 +1,652 @@
+<title>図書貸出ステーション</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6f0;
+  --surface:#ffffff;
+  --surface-alt:#eaefe3;
+  --ink:#1a231d;
+  --ink-soft:#546052;
+  --border:#d9ddcd;
+  --accent:#3f6b4a;
+  --accent-ink:#2a4a33;
+  --accent-soft:#dfe9df;
+  --warn:#a2601f;
+  --warn-soft:#f3e5d1;
+  --bad:#a23f3f;
+  --bad-soft:#f5e2e2;
+  --shadow: 0 1px 2px rgba(20,30,20,.06), 0 8px 24px rgba(20,30,20,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10150f; --surface:#1a2117; --surface-alt:#212a1c;
+    --ink:#e8ece2; --ink-soft:#a7b19f; --border:#333f2c;
+    --accent:#83b892; --accent-ink:#bfe0c8; --accent-soft:#233227;
+    --warn:#e0a25f; --warn-soft:#3a2c19; --bad:#e08080; --bad-soft:#3a2222;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10150f; --surface:#1a2117; --surface-alt:#212a1c;
+  --ink:#e8ece2; --ink-soft:#a7b19f; --border:#333f2c;
+  --accent:#83b892; --accent-ink:#bfe0c8; --accent-soft:#233227;
+  --warn:#e0a25f; --warn-soft:#3a2c19; --bad:#e08080; --bad-soft:#3a2222;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+}
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; }
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Zen Kaku Gothic New",sans-serif;
+  display:flex; flex-direction:column;
+  overflow:hidden;
+}
+.mono{ font-family:"JetBrains Mono",monospace; font-variant-numeric:tabular-nums; }
+
+header{
+  flex:none;
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap; row-gap:8px;
+  padding:14px 18px;
+  border-bottom:1px solid var(--border);
+  background:var(--surface);
+}
+header h1{
+  font-family:"Shippori Mincho",serif; font-size:18px; margin:0;
+  white-space:nowrap;
+}
+.tabs{ display:flex; gap:6px; margin-left:auto; }
+.tab{
+  border:none; background:transparent; color:var(--ink-soft);
+  font-family:"Zen Kaku Gothic New",sans-serif; font-size:14px; font-weight:500;
+  padding:9px 16px; border-radius:20px; cursor:pointer;
+}
+@media (max-width:480px){
+  header h1{ flex:1 1 100%; font-size:16px; }
+  .tabs{ margin-left:0; width:100%; justify-content:space-between; }
+  .tab{ flex:1; padding:9px 8px; font-size:13px; text-align:center; }
+}
+.tab[aria-selected="true"]{ background:var(--accent-soft); color:var(--accent-ink); }
+.badge-count{
+  font-family:"JetBrains Mono",monospace; font-size:10.5px;
+  background:var(--warn-soft); color:var(--warn);
+  border-radius:10px; padding:1px 7px; margin-left:5px;
+}
+
+main{ flex:1; min-height:0; overflow-y:auto; padding:20px 18px 40px; }
+.panel{ max-width:760px; margin:0 auto; }
+.panel[hidden]{ display:none; }
+
+.section-title{ font-size:13px; color:var(--ink-soft); letter-spacing:.03em; margin:0 0 10px; }
+
+/* -------- lending -------- */
+.picker{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:16px; box-shadow:var(--shadow); margin-bottom:20px;
+}
+.picker-row{ display:flex; gap:10px; }
+.search{
+  flex:1; border:1px solid var(--border); border-radius:10px;
+  padding:12px 14px; font-size:15px; font-family:inherit; background:var(--bg); color:var(--ink);
+}
+.scan-btn{
+  flex:none; display:flex; align-items:center; gap:8px;
+  background:var(--accent); color:#fff; border:none; border-radius:10px;
+  padding:12px 18px; font-size:14.5px; font-weight:600; cursor:pointer; font-family:inherit;
+}
+.scan-btn.secondary{ background:var(--surface-alt); color:var(--accent-ink); }
+.scan-btn:active{ opacity:.85; }
+.student-list{ display:grid; gap:6px; margin-top:12px; max-height:220px; overflow-y:auto; }
+.student-row{
+  display:flex; align-items:center; gap:10px;
+  padding:10px 12px; border-radius:9px; cursor:pointer; border:1px solid transparent;
+}
+.student-row:hover{ background:var(--surface-alt); }
+.grade-pill{
+  font-family:"JetBrains Mono",monospace; font-size:11px; background:var(--accent-soft);
+  color:var(--accent-ink); padding:2px 8px; border-radius:10px; flex:none;
+}
+.student-row .name{ font-weight:500; }
+.student-row .id{ margin-left:auto; font-size:11.5px; color:var(--ink-soft); }
+
+.current-student{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:18px 20px; box-shadow:var(--shadow); margin-bottom:16px;
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+}
+.current-student .avatar{
+  width:44px; height:44px; border-radius:50%; background:var(--accent-soft);
+  color:var(--accent-ink); display:flex; align-items:center; justify-content:center;
+  font-family:"Shippori Mincho",serif; font-weight:700; font-size:18px; flex:none;
+}
+.current-student .info{ flex:1; min-width:120px; }
+.current-student .info .name{ font-family:"Shippori Mincho",serif; font-weight:700; font-size:17px; }
+.current-student .info .meta{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+.ghost-btn{
+  background:transparent; border:1px solid var(--border); color:var(--ink-soft);
+  border-radius:9px; padding:9px 14px; font-size:13px; cursor:pointer; font-family:inherit;
+}
+
+.cart{ display:grid; gap:8px; margin-bottom:18px; }
+.cart-item{
+  display:flex; align-items:center; gap:12px;
+  background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 14px;
+}
+.cart-item .title{ font-weight:500; flex:1; }
+.cart-item .isbn{ font-size:11px; color:var(--ink-soft); }
+.cart-item .remove{ background:none; border:none; color:var(--bad); font-size:13px; cursor:pointer; }
+.cart-empty{
+  border:1.5px dashed var(--border); border-radius:10px; padding:22px;
+  text-align:center; color:var(--ink-soft); font-size:13.5px; margin-bottom:18px;
+}
+.limit-note{ font-size:12.5px; color:var(--ink-soft); margin:6px 2px 18px; }
+.limit-note.full{ color:var(--warn); }
+
+.primary-btn{
+  width:100%; background:var(--accent); color:#fff; border:none; border-radius:12px;
+  padding:16px; font-size:16px; font-weight:700; cursor:pointer; font-family:inherit;
+}
+.primary-btn:disabled{ background:var(--surface-alt); color:var(--ink-soft); cursor:not-allowed; }
+
+/* -------- return -------- */
+.loan-row{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:14px 16px; margin-bottom:8px; box-shadow:var(--shadow);
+}
+.loan-row .who{ font-weight:600; font-size:14px; min-width:90px; }
+.loan-row .book{ flex:1; min-width:140px; font-size:13.5px; }
+.loan-row .book .isbn{ font-size:11px; color:var(--ink-soft); display:block; }
+.loan-row .due{ font-size:12px; }
+.pill{
+  font-family:"JetBrains Mono",monospace; font-size:11px; padding:3px 9px; border-radius:20px;
+}
+.pill.ok{ background:var(--accent-soft); color:var(--accent-ink); }
+.pill.overdue{ background:var(--bad-soft); color:var(--bad); }
+.return-btn{
+  background:var(--surface-alt); color:var(--accent-ink); border:none; border-radius:8px;
+  padding:8px 14px; font-size:12.5px; cursor:pointer; font-family:inherit; font-weight:600;
+}
+.empty-state{
+  text-align:center; color:var(--ink-soft); font-size:13.5px; padding:40px 0;
+}
+
+/* -------- status -------- */
+.stat-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:22px; }
+.stat-tile{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:14px 16px; box-shadow:var(--shadow);
+}
+.stat-tile .num{ font-family:"JetBrains Mono",monospace; font-size:24px; font-weight:600; }
+.stat-tile .label{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+table{ width:100%; border-collapse:collapse; font-size:13px; background:var(--surface);
+  border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+th{ text-align:left; background:var(--surface-alt); color:var(--ink-soft); font-size:11px;
+  font-weight:600; padding:9px 12px; }
+td{ padding:9px 12px; border-top:1px solid var(--border); }
+.milestone{ color:var(--warn); font-weight:700; }
+
+/* -------- camera modal -------- */
+.cam-overlay{
+  position:fixed; inset:0; background:rgba(10,14,10,.85);
+  display:flex; align-items:center; justify-content:center; z-index:50;
+}
+.cam-overlay[hidden]{ display:none; }
+.cam-box{
+  background:var(--surface); border-radius:16px; padding:18px;
+  width:min(92vw,420px); text-align:center;
+}
+.cam-box video{ width:100%; border-radius:10px; background:#000; aspect-ratio:1/1; object-fit:cover; }
+.cam-box.wide video{ aspect-ratio:16/9; }
+.cam-box p{ font-size:13px; color:var(--ink-soft); margin:12px 0; }
+.cam-box .cam-err{ color:var(--bad); font-size:12.5px; }
+.cam-box .ghost-btn{ margin-top:6px; }
+
+.toast{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  background:var(--accent); color:#fff; padding:12px 20px; border-radius:30px;
+  font-size:13.5px; font-weight:600; box-shadow:var(--shadow); z-index:60;
+  opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+}
+.toast.show{ opacity:1; transform:translateX(-50%) translateY(-4px); }
+</style>
+
+<header>
+  <h1>📚 図書貸出ステーション</h1>
+  <div class="tabs" role="tablist">
+    <button class="tab" data-tab="lend" aria-selected="true">貸出</button>
+    <button class="tab" data-tab="return">返却<span class="badge-count" id="activeCount" hidden></span></button>
+    <button class="tab" data-tab="status">状況</button>
+  </div>
+</header>
+
+<main>
+  <!-- 貸出 -->
+  <section class="panel" id="panel-lend">
+    <div id="lendPicker">
+      <p class="section-title">生徒を選ぶ</p>
+      <div class="picker">
+        <div class="picker-row">
+          <input class="search" id="studentSearch" placeholder="名前で検索…" autocomplete="off">
+          <button class="scan-btn" data-scan="student">📷 QRでスキャン</button>
+        </div>
+        <div class="student-list" id="studentList"></div>
+      </div>
+    </div>
+
+    <div id="lendActive" hidden>
+      <div class="current-student" id="currentStudentCard"></div>
+
+      <p class="section-title">借りる本</p>
+      <div class="cart" id="cartList"></div>
+      <div class="cart-empty" id="cartEmpty">まだ本がスキャンされていません</div>
+      <div class="picker-row" style="margin-bottom:6px;">
+        <button class="scan-btn" data-scan="book" style="flex:1;">📷 本のISBNバーコードをスキャンして追加</button>
+      </div>
+      <p class="limit-note" id="limitNote">1人3冊まで借りられます</p>
+      <button class="primary-btn" id="confirmLend" disabled>この内容で貸出を確定する</button>
+    </div>
+  </section>
+
+  <!-- 返却 -->
+  <section class="panel" id="panel-return" hidden>
+    <p class="section-title">本をスキャンして返却</p>
+    <button class="scan-btn" data-scan="return" style="width:100%; justify-content:center; margin-bottom:18px;">📷 返却する本のISBNバーコードをスキャン</button>
+    <p class="section-title">貸出中の一覧（手動で返却も可能）</p>
+    <div id="loanList"></div>
+  </section>
+
+  <!-- 状況 -->
+  <section class="panel" id="panel-status" hidden>
+    <div class="stat-row">
+      <div class="stat-tile"><div class="num mono" id="statActive">0</div><div class="label">貸出中</div></div>
+      <div class="stat-tile"><div class="num mono" id="statOverdue">0</div><div class="label">延滞中</div></div>
+      <div class="stat-tile"><div class="num mono" id="statTotal">0</div><div class="label">累計貸出冊数</div></div>
+    </div>
+    <p class="section-title">貸出中の詳細</p>
+    <div style="overflow-x:auto; margin-bottom:24px;">
+      <table id="activeTable"><thead><tr><th>生徒</th><th>本</th><th>貸出日</th><th>返却期限</th><th>状態</th></tr></thead><tbody></tbody></table>
+    </div>
+    <p class="section-title">生徒別 累計冊数</p>
+    <div style="overflow-x:auto;">
+      <table id="studentTable"><thead><tr><th>生徒</th><th>学年</th><th>累計</th><th>達成</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+</main>
+
+<div class="cam-overlay" id="camOverlay" hidden>
+  <div class="cam-box">
+    <p id="camLabel">カードのQRを枠内に写してください</p>
+    <video id="camVideo" playsinline muted></video>
+    <canvas id="camCanvas" hidden></canvas>
+    <p class="cam-err" id="camErr" hidden></p>
+    <button class="ghost-btn" id="camCancel">キャンセル</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STUDENTS = [
+  {id:"D-1001", name:"サンプル 太郎", grade:"3年"},
+  {id:"D-1002", name:"テスト 花子",   grade:"3年"},
+  {id:"D-1003", name:"見本 一郎",     grade:"3年"},
+  {id:"D-1004", name:"架空 さくら",   grade:"3年"},
+  {id:"D-1005", name:"仮名 次郎",     grade:"4年"},
+  {id:"D-1006", name:"試験 美咲",     grade:"4年"},
+  {id:"D-1007", name:"練習 健太",     grade:"4年"},
+  {id:"D-1008", name:"模擬 ゆうと",   grade:"4年"},
+  {id:"D-1009", name:"確認 陽菜",     grade:"5年"},
+  {id:"D-1010", name:"検証 大輝",     grade:"5年"},
+  {id:"D-1011", name:"仮想 結衣",     grade:"5年"},
+  {id:"D-1012", name:"試作 蓮",       grade:"6年"},
+];
+const BOOKS = [
+  {id:"9789999000017", title:"かいけつゾロリのドラゴンたいじ", author:"原ゆたか"},
+  {id:"9789999000024", title:"ママだいすき", author:"きむらゆういち"},
+  {id:"9789999000031", title:"ランドセルのはるやすみ", author:"岡田よしたか"},
+  {id:"9789999000048", title:"ストーブのふゆやすみ", author:"岡田よしたか"},
+  {id:"9789999000055", title:"サッカーが楽しくなる本", author:"少年サッカー編集部"},
+  {id:"9789999000062", title:"ちいさなちいさな王様", author:"アクセル・ハッケ"},
+  {id:"9789999000079", title:"もしかしたら名探偵", author:"杉山亮"},
+  {id:"9789999000086", title:"いつのまにか名探偵", author:"杉山亮"},
+  {id:"9789999000093", title:"ノラネコぐんだん アイスのくに", author:"工藤ノリコ"},
+  {id:"9789999000109", title:"はじめてのキャンプ", author:"林明子"},
+];
+const MAX_BOOKS = 3;
+const LOAN_DAYS = 14;
+const STORAGE_KEY = "hinoki-library-loans-v1";
+
+function loadLoans(){
+  try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }catch(e){ return []; }
+}
+function saveLoans(loans){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(loans)); }catch(e){}
+}
+let loans = loadLoans();
+
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function addDays(iso, n){
+  const d = new Date(iso); d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+function fmt(iso){
+  const [y,m,d] = iso.split("-");
+  return `${m}/${d}`;
+}
+function studentById(id){ return STUDENTS.find(s=>s.id===id); }
+function bookById(id){ return BOOKS.find(b=>b.id===id); }
+function activeLoansFor(studentId){
+  return loans.filter(l=>l.studentId===studentId && !l.returnDate);
+}
+function isOverdue(loan){
+  return !loan.returnDate && loan.dueDate < todayISO();
+}
+
+/* ---------------- tabs ---------------- */
+const tabs = document.querySelectorAll(".tab");
+tabs.forEach(t=>t.addEventListener("click", ()=>{
+  tabs.forEach(x=>x.setAttribute("aria-selected", x===t ? "true":"false"));
+  ["lend","return","status"].forEach(name=>{
+    document.getElementById("panel-"+name).hidden = (name !== t.dataset.tab);
+  });
+  if(t.dataset.tab==="return") renderReturnPanel();
+  if(t.dataset.tab==="status") renderStatusPanel();
+}));
+
+/* ---------------- toast ---------------- */
+let toastTimer;
+function toast(msg){
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.classList.remove("show"), 2200);
+}
+
+/* ---------------- lending flow ---------------- */
+let currentStudent = null;
+let cart = []; // book ids
+
+function renderStudentList(filter){
+  const list = document.getElementById("studentList");
+  const f = (filter||"").trim();
+  const items = STUDENTS.filter(s=> !f || s.name.includes(f) || s.id.includes(f));
+  list.innerHTML = items.map(s=>`
+    <div class="student-row" data-id="${s.id}">
+      <span class="grade-pill">${s.grade}</span>
+      <span class="name">${s.name}</span>
+      <span class="id mono">${s.id}</span>
+    </div>`).join("") || `<div class="empty-state">該当する生徒がいません</div>`;
+  list.querySelectorAll(".student-row").forEach(row=>{
+    row.addEventListener("click", ()=> selectStudent(row.dataset.id));
+  });
+}
+document.getElementById("studentSearch").addEventListener("input", e=>renderStudentList(e.target.value));
+
+function selectStudent(id){
+  const s = studentById(id);
+  if(!s){ toast("この生徒IDは登録されていません: "+id); return; }
+  currentStudent = s;
+  cart = [];
+  document.getElementById("lendPicker").hidden = true;
+  document.getElementById("lendActive").hidden = false;
+  renderCurrentStudent();
+  renderCart();
+}
+function deselectStudent(){
+  currentStudent = null; cart = [];
+  document.getElementById("lendPicker").hidden = false;
+  document.getElementById("lendActive").hidden = true;
+  document.getElementById("studentSearch").value = "";
+  renderStudentList();
+}
+function renderCurrentStudent(){
+  const s = currentStudent;
+  const already = activeLoansFor(s.id).length;
+  document.getElementById("currentStudentCard").innerHTML = `
+    <div class="avatar">${s.name[0]}</div>
+    <div class="info">
+      <div class="name">${s.name}</div>
+      <div class="meta">${s.grade} ・ 現在の貸出中: ${already}冊 ・ ID <span class="mono">${s.id}</span></div>
+    </div>
+    <button class="ghost-btn" id="switchStudent">生徒を変更</button>
+  `;
+  document.getElementById("switchStudent").addEventListener("click", deselectStudent);
+}
+function renderCart(){
+  const already = activeLoansFor(currentStudent.id).length;
+  const remaining = MAX_BOOKS - already;
+  const list = document.getElementById("cartList");
+  const empty = document.getElementById("cartEmpty");
+  list.innerHTML = cart.map((bid,idx)=>{
+    const b = bookById(bid);
+    return `<div class="cart-item">
+      <div><div class="title">${b.title}</div><div class="isbn mono">${b.id}</div></div>
+      <button class="remove" data-idx="${idx}">取り消す</button>
+    </div>`;
+  }).join("");
+  empty.hidden = cart.length>0;
+  list.querySelectorAll(".remove").forEach(btn=>{
+    btn.addEventListener("click", ()=>{ cart.splice(+btn.dataset.idx,1); renderCart(); });
+  });
+  const note = document.getElementById("limitNote");
+  const total = already + cart.length;
+  note.textContent = `1人3冊まで借りられます（現在 ${total} / 3）`;
+  note.classList.toggle("full", total>=MAX_BOOKS);
+  document.getElementById("confirmLend").disabled = cart.length===0 || total>MAX_BOOKS;
+}
+
+document.getElementById("confirmLend").addEventListener("click", ()=>{
+  const date = todayISO();
+  cart.forEach(bid=>{
+    loans.push({
+      loanId: "L-"+Date.now()+"-"+bid,
+      studentId: currentStudent.id,
+      bookId: bid,
+      loanDate: date,
+      dueDate: addDays(date, LOAN_DAYS),
+      returnDate: null,
+    });
+  });
+  saveLoans(loans);
+  toast(`${currentStudent.name} さんに ${cart.length}冊 貸出登録しました`);
+  deselectStudent();
+  updateActiveCountBadge();
+});
+
+/* ---------------- return flow ---------------- */
+function renderReturnPanel(){
+  const list = document.getElementById("loanList");
+  const active = loans.filter(l=>!l.returnDate).sort((a,b)=>a.dueDate.localeCompare(b.dueDate));
+  if(active.length===0){
+    list.innerHTML = `<div class="empty-state">現在、貸出中の本はありません</div>`;
+    return;
+  }
+  list.innerHTML = active.map(l=>{
+    const s = studentById(l.studentId), b = bookById(l.bookId);
+    const overdue = isOverdue(l);
+    return `<div class="loan-row" data-loan="${l.loanId}">
+      <span class="who">${s ? s.name : l.studentId}</span>
+      <span class="book">${b ? b.title : l.bookId}<span class="isbn mono">${l.bookId}</span></span>
+      <span class="pill ${overdue?'overdue':'ok'}">${overdue?'延滞':'返却期限 '+fmt(l.dueDate)}</span>
+      <button class="return-btn" data-loan="${l.loanId}">返却する</button>
+    </div>`;
+  }).join("");
+  list.querySelectorAll(".return-btn").forEach(btn=>{
+    btn.addEventListener("click", ()=> returnLoan(btn.dataset.loan));
+  });
+}
+function returnLoan(loanId){
+  const l = loans.find(x=>x.loanId===loanId);
+  if(!l || l.returnDate) return;
+  l.returnDate = todayISO();
+  saveLoans(loans);
+  const s = studentById(l.studentId), b = bookById(l.bookId);
+  toast(`${s?s.name:l.studentId} さんの「${b?b.title:l.bookId}」を返却処理しました`);
+  renderReturnPanel();
+  updateActiveCountBadge();
+}
+function returnByBookId(bookId){
+  const l = loans.find(x=>x.bookId===bookId && !x.returnDate);
+  if(!l){ toast("この本は現在貸出中ではありません: "+bookId); return; }
+  returnLoan(l.loanId);
+}
+
+/* ---------------- status panel ---------------- */
+function renderStatusPanel(){
+  const active = loans.filter(l=>!l.returnDate);
+  const overdue = active.filter(isOverdue);
+  document.getElementById("statActive").textContent = active.length;
+  document.getElementById("statOverdue").textContent = overdue.length;
+  document.getElementById("statTotal").textContent = loans.length;
+
+  const atbody = document.querySelector("#activeTable tbody");
+  atbody.innerHTML = active.sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(l=>{
+    const s = studentById(l.studentId), b = bookById(l.bookId);
+    const od = isOverdue(l);
+    return `<tr>
+      <td>${s?s.name:l.studentId}</td>
+      <td>${b?b.title:l.bookId}</td>
+      <td class="mono">${fmt(l.loanDate)}</td>
+      <td class="mono">${fmt(l.dueDate)}</td>
+      <td>${od ? '<span class="pill overdue">延滞</span>' : '<span class="pill ok">貸出中</span>'}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="5" style="color:var(--ink-soft); text-align:center;">貸出中の本はありません</td></tr>`;
+
+  const stbody = document.querySelector("#studentTable tbody");
+  stbody.innerHTML = STUDENTS.map(s=>{
+    const count = loans.filter(l=>l.studentId===s.id).length;
+    const milestone = count>0 && count % 10 === 0;
+    return `<tr>
+      <td>${s.name}</td>
+      <td>${s.grade}</td>
+      <td class="mono">${count}</td>
+      <td>${milestone ? '<span class="milestone">★ 10冊達成</span>' : ''}</td>
+    </tr>`;
+  }).join("");
+}
+function updateActiveCountBadge(){
+  const n = loans.filter(l=>!l.returnDate).length;
+  const badge = document.getElementById("activeCount");
+  badge.hidden = n===0;
+  badge.textContent = n;
+}
+
+/* ---------------- camera / QR scan ---------------- */
+let camStream = null;
+let camRAF = null;
+let camMode = null; // 'student' | 'book' | 'return'
+
+const camOverlay = document.getElementById("camOverlay");
+const camVideo = document.getElementById("camVideo");
+const camCanvas = document.getElementById("camCanvas");
+const camErr = document.getElementById("camErr");
+const camLabel = document.getElementById("camLabel");
+
+document.querySelectorAll("[data-scan]").forEach(btn=>{
+  btn.addEventListener("click", ()=> openScanner(btn.dataset.scan));
+});
+document.getElementById("camCancel").addEventListener("click", closeScanner);
+
+// 生徒カードはQR（jsQR）、本はISBNバーコード=EAN-13（Quagga）を読む。
+// モードによって読み取りエンジンを切り替える。
+const BARCODE_MODES = new Set(["book","return"]);
+let scanBusy = false;
+let scanStopped = false;
+
+async function openScanner(mode){
+  camMode = mode;
+  camErr.hidden = true;
+  scanStopped = false;
+  camLabel.textContent = mode==="student" ? "生徒カードのQRを枠内に写してください"
+                        : mode==="return" ? "返却する本の裏表紙のISBNバーコードを枠内に写してください"
+                        : "本の裏表紙のISBNバーコードを枠内に写してください";
+  document.querySelector(".cam-box").classList.toggle("wide", BARCODE_MODES.has(mode));
+  camOverlay.hidden = false;
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"environment" } });
+    camVideo.srcObject = camStream;
+    await camVideo.play();
+    if(BARCODE_MODES.has(mode)) tickScanBarcode(); else tickScanQR();
+  }catch(err){
+    camErr.hidden = false;
+    camErr.textContent = "カメラを起動できませんでした（権限が許可されているか、iPadのSafariで開いているか確認してください）: " + err.message;
+  }
+}
+function closeScanner(){
+  camOverlay.hidden = true;
+  scanStopped = true;
+  if(camRAF) cancelAnimationFrame(camRAF);
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+}
+function grabFrame(){
+  camCanvas.width = camVideo.videoWidth;
+  camCanvas.height = camVideo.videoHeight;
+  const ctx = camCanvas.getContext("2d");
+  ctx.drawImage(camVideo, 0, 0, camCanvas.width, camCanvas.height);
+  return ctx;
+}
+function tickScanQR(){
+  if(scanStopped) return;
+  if(camVideo.readyState === camVideo.HAVE_ENOUGH_DATA){
+    const ctx = grabFrame();
+    const imgData = ctx.getImageData(0,0,camCanvas.width, camCanvas.height);
+    const code = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height) : null;
+    if(code && code.data){
+      handleScan(code.data.trim());
+      return;
+    }
+  }
+  camRAF = requestAnimationFrame(tickScanQR);
+}
+function tickScanBarcode(){
+  if(scanStopped) return;
+  if(!scanBusy && camVideo.readyState === camVideo.HAVE_ENOUGH_DATA && window.Quagga){
+    scanBusy = true;
+    grabFrame();
+    const dataUrl = camCanvas.toDataURL("image/png");
+    Quagga.decodeSingle({
+      decoder: { readers: ["ean_reader"] },
+      locate: true,
+      src: dataUrl,
+    }, function(result){
+      scanBusy = false;
+      if(scanStopped) return;
+      if(result && result.codeResult && result.codeResult.code){
+        handleScan(result.codeResult.code.trim());
+      } else {
+        camRAF = requestAnimationFrame(tickScanBarcode);
+      }
+    });
+  } else {
+    camRAF = requestAnimationFrame(tickScanBarcode);
+  }
+}
+function handleScan(data){
+  closeScanner();
+  if(camMode==="student"){
+    if(!studentById(data)){ toast("未登録の生徒QRです: "+data); return; }
+    selectStudent(data);
+  } else if(camMode==="book"){
+    const already = activeLoansFor(currentStudent.id).length;
+    const total = already + cart.length;
+    if(!bookById(data)){ toast("未登録のISBNです: "+data); return; }
+    if(total>=MAX_BOOKS){ toast("すでに上限の3冊です"); return; }
+    if(cart.includes(data)){ toast("すでにカートに入っています"); return; }
+    cart.push(data);
+    renderCart();
+    toast(bookById(data).title + " を追加しました");
+  } else if(camMode==="return"){
+    returnByBookId(data);
+  }
+}
+
+/* ---------------- manual fallback for testing without camera ---------------- */
+window.__devScan = handleScan; // for console testing if camera unavailable
+
+/* ---------------- init ---------------- */
+renderStudentList();
+updateActiveCountBadge();
+</script>
