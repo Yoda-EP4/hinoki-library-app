@@ -197,8 +197,18 @@ td{ padding:9px 12px; border-top:1px solid var(--border); }
   background:var(--surface); border-radius:16px; padding:18px;
   width:min(92vw,420px); text-align:center;
 }
-.cam-box video{ width:100%; border-radius:10px; background:#000; aspect-ratio:1/1; object-fit:cover; }
+.cam-frame{ position:relative; }
+.cam-box video{ width:100%; border-radius:10px; background:#000; aspect-ratio:1/1; object-fit:cover; display:block; }
 .cam-box.wide video{ aspect-ratio:16/9; }
+.cam-guide{
+  position:absolute; inset:14%; border:2.5px dashed rgba(255,255,255,.85);
+  border-radius:12px; pointer-events:none;
+}
+.cam-box.wide .cam-guide{ inset:22% 8%; border-radius:8px; }
+.cam-hint{
+  position:absolute; left:0; right:0; bottom:6px; text-align:center;
+  color:#fff; font-size:11.5px; text-shadow:0 1px 3px rgba(0,0,0,.6); pointer-events:none;
+}
 .cam-box p{ font-size:13px; color:var(--ink-soft); margin:12px 0; }
 .cam-box .cam-err{ color:var(--bad); font-size:12.5px; }
 .cam-box .ghost-btn{ margin-top:6px; }
@@ -278,7 +288,11 @@ td{ padding:9px 12px; border-top:1px solid var(--border); }
 <div class="cam-overlay" id="camOverlay" hidden>
   <div class="cam-box">
     <p id="camLabel">カードのQRを枠内に写してください</p>
-    <video id="camVideo" playsinline muted></video>
+    <div class="cam-frame">
+      <video id="camVideo" playsinline muted></video>
+      <div class="cam-guide"></div>
+      <div class="cam-hint">枠いっぱいに大きく写してください</div>
+    </div>
     <canvas id="camCanvas" hidden></canvas>
     <p class="cam-err" id="camErr" hidden></p>
     <p id="camDebug" style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-soft); margin:4px 0 0;"></p>
@@ -571,7 +585,7 @@ async function openScanner(mode){
   frameCount = 0;
   try{
     camStream = await navigator.mediaDevices.getUserMedia({
-      video:{ facingMode:"environment", width:{ideal:1920}, height:{ideal:1080} }
+      video:{ facingMode:"environment", width:{ideal:1920}, height:{ideal:1080}, focusMode:"continuous" }
     });
     camVideo.srcObject = camStream;
     await camVideo.play();
