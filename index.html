@@ -281,6 +281,7 @@ td{ padding:9px 12px; border-top:1px solid var(--border); }
     <video id="camVideo" playsinline muted></video>
     <canvas id="camCanvas" hidden></canvas>
     <p class="cam-err" id="camErr" hidden></p>
+    <p id="camDebug" style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-soft); margin:4px 0 0;"></p>
     <button class="ghost-btn" id="camCancel">キャンセル</button>
   </div>
 </div>
@@ -544,6 +545,8 @@ const camVideo = document.getElementById("camVideo");
 const camCanvas = document.getElementById("camCanvas");
 const camErr = document.getElementById("camErr");
 const camLabel = document.getElementById("camLabel");
+const camDebug = document.getElementById("camDebug");
+let frameCount = 0;
 
 document.querySelectorAll("[data-scan]").forEach(btn=>{
   btn.addEventListener("click", ()=> openScanner(btn.dataset.scan));
@@ -565,10 +568,16 @@ async function openScanner(mode){
                         : "本の裏表紙のISBNバーコードを枠内に写してください";
   document.querySelector(".cam-box").classList.toggle("wide", BARCODE_MODES.has(mode));
   camOverlay.hidden = false;
+  frameCount = 0;
   try{
-    camStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:"environment" } });
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:"environment", width:{ideal:1920}, height:{ideal:1080} }
+    });
     camVideo.srcObject = camStream;
     await camVideo.play();
+    const track = camStream.getVideoTracks()[0];
+    const settings = track ? track.getSettings() : {};
+    camDebug.textContent = `解像度 ${settings.width||"?"}x${settings.height||"?"} / 判定中…`;
     if(BARCODE_MODES.has(mode)) tickScanBarcode(); else tickScanQR();
   }catch(err){
     camErr.hidden = false;
@@ -593,7 +602,11 @@ function tickScanQR(){
   if(camVideo.readyState === camVideo.HAVE_ENOUGH_DATA){
     const ctx = grabFrame();
     const imgData = ctx.getImageData(0,0,camCanvas.width, camCanvas.height);
-    const code = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height) : null;
+    const code = window.jsQR ? jsQR(imgData.data, imgData.width, imgData.height, {inversionAttempts:"attemptBoth"}) : null;
+    frameCount++;
+    if(frameCount % 15 === 0){
+      camDebug.textContent = `解像度 ${camCanvas.width}x${camCanvas.height} / ${frameCount}フレーム処理済み / 未検出`;
+    }
     if(code && code.data){
       handleScan(code.data.trim());
       return;
