@@ -97,6 +97,7 @@ main{ flex:1; min-height:0; overflow-y:auto; padding:20px 18px 40px; }
 }
 .scan-btn.secondary{ background:var(--surface-alt); color:var(--accent-ink); }
 .scan-btn:active{ opacity:.85; }
+.scan-btn:disabled{ background:var(--surface-alt); color:var(--ink-soft); cursor:not-allowed; }
 .student-list{ display:grid; gap:6px; margin-top:12px; max-height:220px; overflow-y:auto; }
 .student-row{
   display:flex; align-items:center; gap:10px;
@@ -252,7 +253,7 @@ td{ padding:9px 12px; border-top:1px solid var(--border); }
       <div class="cart" id="cartList"></div>
       <div class="cart-empty" id="cartEmpty">まだ本がスキャンされていません</div>
       <div class="picker-row" style="margin-bottom:6px;">
-        <button class="scan-btn" data-scan="book" style="flex:1;">📷 本のISBNバーコードをスキャンして追加</button>
+        <button class="scan-btn" id="scanBookBtn" data-scan="book" style="flex:1;">📷 本のISBNバーコードをスキャンして追加</button>
       </div>
       <p class="limit-note" id="limitNote">1人3冊まで借りられます</p>
       <button class="primary-btn" id="confirmLend" disabled>この内容で貸出を確定する</button>
@@ -318,16 +319,16 @@ const STUDENTS = [
   {id:"D-1012", name:"試作 蓮",       grade:"6年"},
 ];
 const BOOKS = [
-  {id:"9789999000017", title:"かいけつゾロリのドラゴンたいじ", author:"原ゆたか"},
-  {id:"9789999000024", title:"ママだいすき", author:"きむらゆういち"},
-  {id:"9789999000031", title:"ランドセルのはるやすみ", author:"岡田よしたか"},
-  {id:"9789999000048", title:"ストーブのふゆやすみ", author:"岡田よしたか"},
-  {id:"9789999000055", title:"サッカーが楽しくなる本", author:"少年サッカー編集部"},
-  {id:"9789999000062", title:"ちいさなちいさな王様", author:"アクセル・ハッケ"},
-  {id:"9789999000079", title:"もしかしたら名探偵", author:"杉山亮"},
-  {id:"9789999000086", title:"いつのまにか名探偵", author:"杉山亮"},
-  {id:"9789999000093", title:"ノラネコぐんだん アイスのくに", author:"工藤ノリコ"},
-  {id:"9789999000109", title:"はじめてのキャンプ", author:"林明子"},
+  {id:"9789999100007", title:"かいけつゾロリのドラゴンたいじ", author:"原ゆたか"},
+  {id:"9789999223454", title:"ママだいすき", author:"きむらゆういち"},
+  {id:"9789999345675", title:"ランドセルのはるやすみ", author:"岡田よしたか"},
+  {id:"9789999467896", title:"ストーブのふゆやすみ", author:"岡田よしたか"},
+  {id:"9789999589017", title:"サッカーが楽しくなる本", author:"少年サッカー編集部"},
+  {id:"9789999601238", title:"ちいさなちいさな王様", author:"アクセル・ハッケ"},
+  {id:"9789999723459", title:"もしかしたら名探偵", author:"杉山亮"},
+  {id:"9789999845670", title:"いつのまにか名探偵", author:"杉山亮"},
+  {id:"9789999967891", title:"ノラネコぐんだん アイスのくに", author:"工藤ノリコ"},
+  {id:"9789999189019", title:"はじめてのキャンプ", author:"林明子"},
 ];
 const MAX_BOOKS = 3;
 const LOAN_DAYS = 14;
@@ -451,6 +452,7 @@ function renderCart(){
   note.textContent = `1人3冊まで借りられます（現在 ${total} / 3）`;
   note.classList.toggle("full", total>=MAX_BOOKS);
   document.getElementById("confirmLend").disabled = cart.length===0 || total>MAX_BOOKS;
+  document.getElementById("scanBookBtn").disabled = total>=MAX_BOOKS;
 }
 
 document.getElementById("confirmLend").addEventListener("click", ()=>{
@@ -583,6 +585,8 @@ async function openScanner(mode){
   document.querySelector(".cam-box").classList.toggle("wide", BARCODE_MODES.has(mode));
   camOverlay.hidden = false;
   frameCount = 0;
+  lastBarcodeGuess = null;
+  barcodeGuessStreak = 0;
   try{
     camStream = await navigator.mediaDevices.getUserMedia({
       video:{ facingMode:"environment", width:{ideal:1920}, height:{ideal:1080}, focusMode:"continuous" }
@@ -628,6 +632,13 @@ function tickScanQR(){
   }
   camRAF = requestAnimationFrame(tickScanQR);
 }
+// EAN-13には誤り訂正がなく、印刷のにじみや手ブレで1桁だけ誤読することがある。
+// 誤読でも別の登録済みISBNとたまたま一致すると気づかずに違う本が追加されてしまうため、
+// 同じ値を連続2回読めてから確定する（1回だけの読み取りは採用しない）。
+let lastBarcodeGuess = null;
+let barcodeGuessStreak = 0;
+const BARCODE_CONFIRM_STREAK = 2;
+
 function tickScanBarcode(){
   if(scanStopped) return;
   if(!scanBusy && camVideo.readyState === camVideo.HAVE_ENOUGH_DATA && window.Quagga){
@@ -641,11 +652,26 @@ function tickScanBarcode(){
     }, function(result){
       scanBusy = false;
       if(scanStopped) return;
-      if(result && result.codeResult && result.codeResult.code){
-        handleScan(result.codeResult.code.trim());
+      const code = result && result.codeResult && result.codeResult.code ? result.codeResult.code.trim() : null;
+      if(code){
+        if(code === lastBarcodeGuess){
+          barcodeGuessStreak++;
+        } else {
+          lastBarcodeGuess = code;
+          barcodeGuessStreak = 1;
+        }
+        camDebug.textContent = `読み取り中: ${code}（確認 ${barcodeGuessStreak}/${BARCODE_CONFIRM_STREAK}）`;
+        if(barcodeGuessStreak >= BARCODE_CONFIRM_STREAK){
+          lastBarcodeGuess = null;
+          barcodeGuessStreak = 0;
+          handleScan(code);
+          return;
+        }
       } else {
-        camRAF = requestAnimationFrame(tickScanBarcode);
+        lastBarcodeGuess = null;
+        barcodeGuessStreak = 0;
       }
+      camRAF = requestAnimationFrame(tickScanBarcode);
     });
   } else {
     camRAF = requestAnimationFrame(tickScanBarcode);
